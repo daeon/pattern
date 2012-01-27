@@ -1766,6 +1766,32 @@ class NearestNeighbor(Classifier):
         except IndexError:
             return None
 
+    def classes(self, document):
+        """ Returns the type with the highest probability for the given document
+            (a Document object or a list of words).
+        """
+        # Basic majority voting.
+        # Distance is calculated between the document vector and all training instances.
+        # This will make NearestNeighbor.test() slow in higher dimensions.
+        classes = {}
+        v1 = self._vector(document)[1]
+        # k-d trees are slower than brute-force for vectors with high dimensionality:
+        #if self._kdtree is None:
+        #    self._kdtree = kdtree((v for type, v in self._vectors))
+        #    self._kdtree.map = dict((v.id, type) for type, v in self._vectors)
+        #D = self._kdtree.nearest_neighbors(v1, self.k, self.distance)
+        D = ((distance(v1, v2, method=self.distance), type) for type, v2 in self._vectors)
+        D = ((d, type) for d, type in D if d < 1) # Nothing in common if distance=1.0.
+        D = heapq.nsmallest(self.k, D)            # k-least distant.
+        for d, type in D:
+            classes.setdefault(type, 0)
+            classes[type] += 1 / (d or 0.0000000001)
+        try:
+            # Pick random winner if several candidates have equal highest score.
+            return classes
+        except IndexError:
+            return None
+
 kNN = KNN = NearestNeighbor
 
 #d1 = Document("cats have stripes, purr and drink milk", type="cat", threshold=0, stemmer=None)

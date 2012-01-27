@@ -15,6 +15,7 @@ else:
 	  "libsvm-win32.dll",     # 1) 32-bit Windows
 	  "libsvm-mac32.so",      # 2) 32-bit Mac OS X
 	  "libsvm-mac64.so",      # 3) 64-bit Mac OS X
+	  "libsvm.so",      # 3) 64-bit Mac OS X
 	  "libsvm-ubuntu64.so")): # 4) 64-bit Linux Ubuntu
 		try:
 			libsvm = CDLL(os.path.join(os.path.dirname(__file__), binary)); break

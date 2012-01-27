@@ -349,7 +349,7 @@ class URL:
         except ValueError:
             raise URLError
             
-    def download(self, timeout=10, cached=True, throttle=0, proxy=None, user_agent=USER_AGENT, referrer=REFERRER):
+    def download(self, timeout=10, cached=True, throttle=0, proxy=None, user_agent=USER_AGENT, referrer=REFERRER, filename=""):
         """ Downloads the content at the given URL (by default it will be cached locally).
             The content is returned as a unicode string.
         """
@@ -369,6 +369,11 @@ class URL:
             cache[id] = data
         if throttle:
             time.sleep(max(throttle-(time.time()-t), 0))
+        if filename:
+            print "Saving to => ", filename
+            f = open(filename, 'w')
+            f.write(encode_utf8(data))
+            f.close()
         return data
     
     def read(self, *args):
@@ -1711,6 +1716,9 @@ class Newsfeed(SearchEngine):
             s = "\n\n".join([v.get("value") for v in x.get("content", [])]) or x.get("summary")
             r = Result(url=None)
             r.url         = self.format(x.get("link"))
+            if not r.url:      # Huffington posts special case
+               r.url = self.format((x.get("links")[0])['href'])
+            r.domain      = urlparse.urlparse(self.format(r.url)).hostname
             r.title       = self.format(x.get("title"))
             r.description = self.format(s)
             r.date        = self.format(x.get("updated"))
