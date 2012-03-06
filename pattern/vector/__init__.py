@@ -1787,7 +1787,7 @@ class NearestNeighbor(Classifier):
             classes[type] += 1 / (d or 0.0000000001)
         try:
             # Pick random winner if several candidates have equal highest score.
-            return choice([k for k, v in classes.iteritems() if v == max(classes.values()) > 0])
+            return choice([k for k, v in classes.iteritems() if v == max(classes.values()) > 0]), classes, D
         except IndexError:
             return None
 
