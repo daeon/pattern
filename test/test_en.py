@@ -6,7 +6,7 @@ import subprocess
 
 from pattern import en
 
-#-----------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------
 
 class TestInflection(unittest.TestCase):
 
@@ -39,7 +39,7 @@ class TestInflection(unittest.TestCase):
         # Assert the accuracy of the pluralization algorithm.
         from pattern.db import Datasheet
         i, n = 0, 0
-        for sg, pl in Datasheet.load(os.path.join("corpora", "celex-wordforms.csv")):
+        for sg, pl in Datasheet.load(os.path.join("corpora", "celex-wordforms-en.csv")):
             if en.pluralize(sg) == pl:
                 i +=1
             n += 1
@@ -50,7 +50,7 @@ class TestInflection(unittest.TestCase):
         # Assert the accuracy of the singularization algorithm.
         from pattern.db import Datasheet
         i, n = 0, 0
-        for sg, pl in Datasheet.load(os.path.join("corpora", "celex-wordforms.csv")):
+        for sg, pl in Datasheet.load(os.path.join("corpora", "celex-wordforms-en.csv")):
             if en.singularize(pl) == sg:
                 i +=1
             n += 1
@@ -85,7 +85,7 @@ class TestInflection(unittest.TestCase):
         print "pattern.en.inflect._parse_lexeme()"
 
     def test_conjugate(self):
-        # Assert different tenses with differen conjugations.
+        # Assert different tenses with different conjugations.
         for (v1, v2, tense) in (
           ("be", "be",    en.INFINITIVE),
           ("be", "am",    en.PRESENT_1ST_PERSON_SINGULAR),
@@ -97,7 +97,7 @@ class TestInflection(unittest.TestCase):
           ("be", "were",  en.PAST_2ND_PERSON_SINGULAR),
           ("be", "was",   en.PAST_3RD_PERSON_SINGULAR),
           ("be", "were",  en.PAST_PLURAL),
-          ("be", "was",   en.PAST),
+          ("be", "were",  en.PAST),
           ("be", "been",  en.PAST_PARTICIPLE),
           ("had", "have",   "inf"),
           ("had", "have",   "1sg"),
@@ -112,7 +112,7 @@ class TestInflection(unittest.TestCase):
           ("has", "had",    "p"),
           ("has", "had",    "ppart"),
           ("imaginerify", "imaginerified", "3sgp")):
-            self.assertTrue(en.conjugate(v1, tense), v2)
+            self.assertEqual(en.conjugate(v1, tense), v2)
         print "pattern.en.conjugate()"
     
     def test_lemma(self):
@@ -149,7 +149,7 @@ class TestInflection(unittest.TestCase):
         self.assertEqual(en.superlative("important"), "most important")
         print "pattern.en.superlative()"
 
-#-----------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------
 
 class TestQuantification(unittest.TestCase):
     
@@ -206,7 +206,7 @@ class TestQuantification(unittest.TestCase):
         self.assertEqual(en.reflect(en.reflect), "a function")
         print "pattern.en.reflect()"
 
-#-----------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------
 
 class TestParser(unittest.TestCase):
     
@@ -386,6 +386,14 @@ class TestParser(unittest.TestCase):
         )
         # 4) Assert unicode.
         self.assertTrue(isinstance(v, unicode))
+        # 5) Assert unicode for faulty input (bytestring with unicode characters).
+        self.assertTrue(isinstance(en.parse("ø ü"), unicode))
+        self.assertTrue(isinstance(en.parse("ø ü", tokenize=True,  tags=False, chunks=False), unicode))
+        self.assertTrue(isinstance(en.parse("ø ü", tokenize=False, tags=False, chunks=False), unicode))
+        self.assertTrue(isinstance(en.parse("o u", encoding="ascii"), unicode))
+        # 6) Assert optional parameters (i.e., setting all to False).
+        self.assertEqual(en.parse("ø ü.", tokenize=True,  tags=False, chunks=False), u"ø ü .")
+        self.assertEqual(en.parse("ø ü.", tokenize=False, tags=False, chunks=False), u"ø ü.")
         print "pattern.en.parser.parse()"
 
     def test_tagged_string(self):
@@ -418,7 +426,7 @@ class TestParser(unittest.TestCase):
         self.assertEqual(v, "Nice/JJ/B-NP/O/O/nice cat/NN/I-NP/O/O/cat ././O/O/O/.")
         print "python -m pattern.en.parser"
 
-#-----------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------
 
 class TestParseTree(unittest.TestCase):
     
@@ -594,7 +602,7 @@ class TestParseTree(unittest.TestCase):
         self.assertEqual(v.set[0], 1)
         print "pattern.en.parser.tree.dynamic_map()"
         
-#-----------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------
 
 class TestModality(unittest.TestCase):
     
@@ -698,7 +706,7 @@ class TestModality(unittest.TestCase):
         self.assertTrue(F > 0.65)
         print "pattern.en.modality()"
 
-#-----------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------
 
 class TestSentiment(unittest.TestCase):
     
@@ -758,7 +766,7 @@ class TestSentiment(unittest.TestCase):
         self.assertTrue(lexicon["horrible"][0] < 0)
         print "pattern.en.parser.sentiment.SentiWordNet"
 
-#-----------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------
 
 class TestWordNet(unittest.TestCase):
     
@@ -835,7 +843,7 @@ class TestWordNet(unittest.TestCase):
         self.assertEqual(v.weight, (0.125, 0.125))
         print "pattern.en.wordnet.sentiwordnet"
 
-#-----------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------
 
 class TestWordlists(unittest.TestCase):
     
@@ -855,7 +863,7 @@ class TestWordlists(unittest.TestCase):
         self.assertTrue("dr." in v)
         print "pattern.en.wordlist.Wordlist"
 
-#-----------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------
 
 def suite():
     suite = unittest.TestSuite()

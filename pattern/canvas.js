@@ -1,8 +1,9 @@
-/*### PATTERN | JAVASCRIPT:CANVAS ###################################################################*/
+/*### PATTERN | CANVAS.JS ###########################################################################*/
 // Copyright (c) 2010 University of Antwerp, Belgium
 // Authors: Tom De Smedt <tom@organisms.be>
 // License: BSD (see LICENSE.txt for details).
-// http://www.clips.ua.ac.be/pages/pattern
+// Version: 1.0.
+// http://www.clips.ua.ac.be/pages/pattern-canvas
 
 // The NodeBox drawing API for the HTML5 <canvas> element.
 // The commands are adopted from NodeBox for OpenGL,
@@ -21,14 +22,15 @@ function attachEvent(element, name, f) {
     /* Cross-browser attachEvent().
      * Ensures that "this" inside the function f refers to the given element .
      */
-    element[name] = Function.closure(element, f);
+    f = Function.closure(element, f);
     if (element.addEventListener) {
         element.addEventListener(name, f, false);
     } else if (element.attachEvent) {
-        element.attachEvent("on"+name, element[name]);
+        element.attachEvent("on"+name, f);
     } else {
-        element["on"+name] = element[name];
+        element["on"+name] = f;
     }
+    element[name] = f; // So we can do element.name(), see widget().
 }
 
 Function.closure = function(parent, f) {
@@ -97,7 +99,7 @@ Array.filter = function(array, f) {
 };
 
 Array.enumerate = function(array, f) {
-    /* Calls callback(index, value) for each value in the given array.
+    /* Calls f(index, value) for each value in the given array.
      */
     for (var i=0; i < array.length; i++) {
         f(i, array[i]);
@@ -130,6 +132,7 @@ Array.shuffle = function(array) {
         array[i] = array[p];
         array[p] = x;
     }
+    return array;
 };
 
 Array.range = function(i, j) {
@@ -214,19 +217,19 @@ Math.round = function(x, decimals) {
     } else {
         return Math._round(x * Math.pow(10, decimals)) / Math.pow(10, decimals);
     }
-}
+};
 
 Math.degrees = function(radians) {
     return radians * 180 / Math.PI;
-}
+};
 
 Math.radians = function(degrees) {
     return degrees / 180 * Math.PI;
-}
+};
 
 Math.clamp = function(value, min, max) {
     return Math.max(min, Math.min(value, max));
-}
+};
 
 var Point = Class.extend({
     init: function(x, y) {
@@ -507,7 +510,7 @@ var Color = Class.extend({
     
     map: function(options) {
         /* Returns array [R,G,B,A] mapped to the given base,
-         * e.g. f0-255 instead of 0.0-1.0 which is useful for setting image pixels.
+         * e.g. 0-255 instead of 0.0-1.0 which is useful for setting image pixels.
          * Other values than RGBA can be obtained by setting the colorspace (RGB/HSB/HEX).
          */
         var base = options && options.base || 1.0;
@@ -810,34 +813,39 @@ var LINEAR = "linear";
 var RADIAL = "radial";
 
 var Gradient = Class.extend({
-    
-    init: function(clr1, clr2, type, dx, dy, distance, angle) {
+//  init: function(clr1, clr2, {type: LINEAR, x: 0, y: 0, spread: 100, angle: 0})
+    init: function(clr1, clr2, options) {
         /* A gradient with two colors.
          */
+        var o = options || {};
         if (clr1 instanceof Gradient) {
             // One parameter, another gradient object.
-            var g=clr1; clr1=g.clr1.copy(); clr2=g.clr2.copy(); type=g.type; dx=g.x; dy=g.y; distance=g.distance; angle=g.angle;
+            var g = clr1; 
+            clr1 = g.clr1.copy(); 
+            clr2 = g.clr2.copy(); 
+            o = {type: g.type, x: g.x, y: g.y, spread: g.spread, angle: g.angle};
         }
         this.clr1 = (clr1 instanceof Color)? clr1 : new Color(clr1);
         this.clr2 = (clr2 instanceof Color)? clr2 : new Color(clr2);
-        this.type = type || LINEAR;
-        this.x = dx || 0;
-        this.y = dy || 0;
-        this.distance = (distance !== undefined)? distance : 100;
-        this.angle = angle || 0;
+        this.type = o.type || LINEAR;
+        this.x = o.x || 0;
+        this.y = o.y || 0;
+        this.a = 1.0; // Shapes will only be drawn if color or gradient has alpha > 1.0.
+        this.spread = (o.spread !== undefined)? o.spread : 100;
+        this.angle = o.angle || 0;
     },
     
     _get: function(dx, dy) {
-        // See also BezierPath.draw() for dx and dy:
+        // See also Path.draw() for dx and dy:
         // we use the first MOVETO of the path to make the gradient location relative.
         var x = this.x + (dx || 0);
         var y = this.y + (dy || 0);
         if (this.type == LINEAR) {
-            var p = geometry.coordinates(x, y, this.distance, this.angle);
+            var p = geometry.coordinates(x, y, this.spread, this.angle);
             var g = _ctx.createLinearGradient(x, y, p.x, p.y);
         }
         if (this.type == RADIAL) {
-            var g = _ctx.createRadialGradient(x, y, 0, x, y, this.distance);
+            var g = _ctx.createRadialGradient(x, y, 0, x, y, this.spread);
         }
         g.addColorStop(0.0, this.clr1._get());
         g.addColorStop(1.0, this.clr2._get());
@@ -981,9 +989,9 @@ var AffineTransform = Transform = Class.extend({
     },
     
     transform_path: function(path) {
-        /* Returns a BezierPath object with the transformation applied.
+        /* Returns a Path object with the transformation applied.
          */
-        var p = new BezierPath();
+        var p = new Path();
         for (var i=0; i < path.array.length; i++) {
             var pt = path.array[i];
             if (pt.cmd == "closeto") {
@@ -1259,7 +1267,7 @@ var Bezier = Class.extend({
 bezier = new Bezier();
 
 /*--- BEZIER PATH ----------------------------------------------------------------------------------*/
-// A BezierPath class with lineto(), curveto() and moveto() commands.
+// A Path class with lineto(), curveto() and moveto() commands.
 
 var MOVETO  = "moveto";
 var LINETO  = "lineto";
@@ -1288,17 +1296,17 @@ var PathElement = Class.extend({
 });
 
 var DynamicPathElement = PathElement.extend({
-    // Not a "fixed" point in the BezierPath, but calculated with BezierPath.point().
+    // Not a "fixed" point in the Path, but calculated with Path.point().
 });
 
-var BezierPath = Path = Class.extend({
+var Path = BezierPath = Class.extend({
     
     init: function(path) {
         /* A list of PathElements describing the curves and lines that make up the path.
          */
         if (path === undefined) {
             this.array = []; // We can't subclass Array.
-        } else if (path instanceof BezierPath) {
+        } else if (path instanceof Path) {
             this.array = Array.map(path.array, function(pt) { return pt.copy(); });
         } else if (path instanceof Array) {
             this.array = Array.map(path, function(pt) { return pt.copy(); });
@@ -1313,7 +1321,7 @@ var BezierPath = Path = Class.extend({
     },
     
     copy: function() {
-        return new BezierPath(this);
+        return new Path(this);
     },
     
     moveto: function(x, y) {
@@ -1365,17 +1373,30 @@ var BezierPath = Path = Class.extend({
     },
     
     closePath: function() {
-        this.closePath();
+        this.closepath();
     },
     
-    rect: function(x, y, width, height) {
+    rect: function(x, y, width, height, options) {
         /* Adds a rectangle to the path.
          */
-        this.moveto(x, y);
-        this.lineto(x+width, y);
-        this.lineto(x+width, y+height);
-        this.lineto(x, y+height);
-        this.lineto(x, y);
+        if (!options || options.roundness === undefined) {
+            this.moveto(x, y);
+            this.lineto(x+width, y);
+            this.lineto(x+width, y+height);
+            this.lineto(x, y+height);
+            this.lineto(x, y);
+        } else {
+            var curve = Math.min(width * options.roundness, height * options.roundness);
+            this.moveto(x, y+curve);
+            this.curveto(x, y, x, y, x+curve, y);
+            this.lineto(x+width-curve, y);
+            this.curveto(x+width, y, x+width, y, x+width, y+curve);
+            this.lineto(x+width, y+height-curve);
+            this.curveto(x+width, y+height, x+width, y+height, x+width-curve, y+height);
+            this.lineto(x+curve, y+height);
+            this.curveto(x, y+height, x, y+height, x, y+height-curve);
+            this.closepath();
+        }
     },
     
     ellipse: function(x, y, width, height) {
@@ -1499,11 +1520,11 @@ var BezierPath = Path = Class.extend({
 });
 
 function drawpath(path, options) {
-    /* Draws the given BezierPath (or list of PathElements).
+    /* Draws the given Path (or list of PathElements).
      * The current stroke, strokewidth and fill color are applied.
      */
     if (path instanceof Array) {
-        path = new BezierPath(path);
+        path = new Path(path);
     }
     path.draw(options);
 }
@@ -1520,7 +1541,7 @@ function beginpath(x, y) {
      * The commands moveto(), lineto(), curveto() and closepath() 
      * can then be used between beginpath() and endpath() calls.
      */
-    _ctx.state.path = new BezierPath();
+    _ctx.state.path = new Path();
     _ctx.state.path.moveto(x, y);
 }
 
@@ -1543,20 +1564,20 @@ function curveto(x1, y1, x2, y2, x3, y3) {
     _ctx.state.path.curveto(x1, y1, x2, y2, x3, y3);
 }
 
-function closepath(x, y) { 
+function closepath() { 
     /* Closes the current path with a straight line to the last MOVETO.
      */
     _ctx.state.path.closepath();
 }
 
-function endpath(a) {
+function endpath(options) {
     /* Draws and returns the current path.
-     * With {"draw"=false}, only returns the path so it can be manipulated and drawn with drawpath().
+     * With {draw:false}, only returns the path so it can be manipulated and drawn with drawpath().
      */
     var s = _ctx.state;
     if (s.autoclosepath) s.path.closepath();
-    if (!a || a.draw) {
-        s.path.draw(a);
+    if (!options || options.draw) {
+        s.path.draw(options);
     }
     var p=s.path; s.path=null;
     return p;
@@ -1576,7 +1597,7 @@ var endPath = endpath;
 function directed(points, callback) {
     /* Calls callback(angle, pt) for each point in the given path.
      * The angle represents the direction of the point on the path.
-     * This works with BezierPath, Bezierpath.points, [pt1, pt2, pt2, ...]
+     * This works with Path, Path.points, [pt1, pt2, pt2, ...]
      * For example:
      * directed(path.points(30), function(angle, pt) {
      *     push();
@@ -1588,29 +1609,29 @@ function directed(points, callback) {
      * This is useful if you want to have shapes following a path.
      * To put text on a path, rotate the angle by +-90 to get the normal (i.e. perpendicular).
      */
-    var p = (points instanceof BezierPath)? points.array : points;
+    var p = (points instanceof Path)? points.array : points;
     var n = p.length;
     for (var i=0; i<n; i++) {
         var pt = p[i];
         if (0 < i && i < n-1 && pt.cmd && pt.cmd == CURVETO) {
             // For a point on a curve, the control handle gives the best direction.
-            // For PathElement (fixed point in BezierPath), ctrl2 tells us how the curve arrives.
-            // For DynamicPathElement (returnd from BezierPath.point()), ctrl1 tell how the curve arrives.
+            // For PathElement (fixed point in Path), ctrl2 tells us how the curve arrives.
+            // For DynamicPathElement (returnd from Path.point()), ctrl1 tell how the curve arrives.
             var ctrl = (pt instanceof DynamicPathElement)? pt.ctrl1 : pt.ctrl2;
             var angle = geometry.angle(ctrl.x, ctrl.y, pt.x, pt.y);
         } else if (0 < i && i < n-1 && pt.cmd && pt.cmd == LINETO && p[i-1].cmd == CURVETO) {
             // For a point on a line preceded by a curve, look ahead gives better results.
             var angle = geometry.angle(pt.x, pt.y, p[i+1].x, p[i+1].y);
-        } else if (i == 0 && points instanceof BezierPath) {
-            // For the first point in a BezierPath, we can calculate a next point very close by.
+        } else if (i == 0 && points instanceof Path) {
+            // For the first point in a Path, we can calculate a next point very close by.
             var pt1 = points.point(0.001);
             var angle = geometry.angle(pt.x, pt.y, pt1.x, pt1.y);
-        } else if (i == n-1 && points instanceof BezierPath) {
-            // For the last point in a BezierPath, we can calculate a previous point very close by.
+        } else if (i == n-1 && points instanceof Path) {
+            // For the last point in a Path, we can calculate a previous point very close by.
             var pt0 = points.point(0.999);
             var angle = geometry.angle(pt0.x, pt0.y, pt.x, pt.y)
         } else if (i == n-1 && pt instanceof DynamicPathElement && pt.ctrl1.x != pt.x || pt.ctrl1.y != pt.y) {
-            // For the last point in BezierPath.points(), use incoming handle (ctrl1) for curves.
+            // For the last point in Path.points(), use incoming handle (ctrl1) for curves.
             var angle = geometry.angle(pt.ctrl1.x, pt.ctrl1.y, pt.x, pt.y);
         } else if (0 < i) {
             // For any point, look back gives a good result, if enough points are given.
@@ -1628,7 +1649,7 @@ function directed(points, callback) {
 /*--- CLIPPING PATH --------------------------------------------------------------------------------*/
 
 function beginclip(path) {
-    /* Enables the given BezierPath as a clipping mask.
+    /* Enables the given Path as a clipping mask.
        Drawing commands between beginclip() and endclip() are constrained to the shape of the path.
      */
     push();
@@ -1651,7 +1672,7 @@ var endClip = endclip;
 function line(x0, y0, x1, y1, options) {
     /* Draws a straight line from x0, y0 to x1, y1 with the current stroke color and strokewidth.
      */
-    // It is faster to do it directly without creating a BezierPath:
+    // It is faster to do it directly without creating a Path:
     var a = _colorMixin(options);
     if (a[1] && a[1].a > 0) {
         _ctx.beginPath();
@@ -1665,13 +1686,19 @@ function rect(x, y, width, height, options) {
     /* Draws a rectangle with the top left corner at x, y.
      * The current stroke, strokewidth and fill color are applied.
      */
-    // It is faster to do it directly without creating a BezierPath:
+    // It is faster to do it directly without creating a Path:
     var a = _colorMixin(options);
     if (a[0] && a[0].a > 0 || a[1] && a[1].a > 0) {
-        _ctx.beginPath();
-        _ctx.rect(x, y, width, height);
-        _ctx_fill(a[0]);
-        _ctx_stroke(a[1], a[2]);
+        if (!options || options.roundness === undefined) {
+            _ctx.beginPath();
+            _ctx.rect(x, y, width, height);
+            _ctx_fill(a[0]);
+            _ctx_stroke(a[1], a[2]);
+        } else {
+            var p = new Path();
+            p.rect(x, y, width, height, options);
+            p.draw(options);
+        }
     }
 }
 
@@ -1695,7 +1722,7 @@ function ellipse(x, y, width, height, options) {
     /* Draws an ellipse with the center located at x, y.
      * The current stroke, strokewidth and fill color are applied.
      */
-    var p = new BezierPath();
+    var p = new Path();
     p.ellipse(x, y, width, height);
     p.draw(options);
 }
@@ -1708,7 +1735,7 @@ function arrow(x, y, width, options) {
      */
     var head = width * 0.4;
     var tail = width * 0.2;
-    var p = new BezierPath();
+    var p = new Path();
     p.moveto(x, y);
     p.lineto(x-head, y+head);
     p.lineto(x-head, y+tail);
@@ -1727,7 +1754,7 @@ function star(x, y, points, outer, inner, options) {
     if (points === undefined) points = 20;
     if (outer === undefined) outer = 100;
     if (inner === undefined) inner = 50;
-    var p = new BezierPath();
+    var p = new Path();
     p.moveto(x, y+outer);
     for (var i=0; i < 2*points+1; i++) {
         var r = (i%2 == 0)? outer : inner;
@@ -1812,6 +1839,11 @@ var ImageCache = Class.extend({
         if (url) {
             this.cache[url] = img;
         }
+        // A canvas with remote (cross-domain) images becomes "tainted":
+        // ctx.toDataURL() or ctx.getImageData() won't work,
+        // so neither will Pixels or OffscreenBuffer.
+        // https://developer.mozilla.org/en/CORS_Enabled_Image
+        //img.crossOrigin = "";
         img.src = src;
         return img;
     }
@@ -1852,7 +1884,7 @@ var Image = Class.extend({
         });
     },
 
-//  draw: function({x: 0, y: 0, width: null, height: null, alpha: 1.0})
+//  draw: function(x, y, {width: null, height: null, alpha: 1.0})
     draw: function(x, y, options) {
         /* Draws the image.
          * The given parameters (if any) override the image's attributes.
@@ -1908,6 +1940,7 @@ var Pixels = Class.extend({
          * Pixels.update() must be called to reflect any changes to Pixels.array.
          * The Pixels object can be passed to the image() command.
          * The original image will not be modified.
+         * Throws a security error for remote (cross-domain) images.
          */
         img = (img instanceof Image)? img : new Image(img);
         this._img = img;
@@ -2189,23 +2222,36 @@ var Mouse = Class.extend({
             "x": 0,
             "y": 0,
         };
+        this._away = function() {
+            // Returns true if not inside Mouse.parent.
+            return !(0 <= this.x && this.x <= this.parent.offsetWidth && 
+                     0 <= this.y && this.y <= this.parent.offsetHeight);
+        }
         var eventDown = function(e) {
             // Create parent onmousedown event (set Mouse.pressed).
+            // Fire Mouse.onpress().
             var m = this._mouse;
             m.pressed = true;
             m._x0 = m.x;
             m._y0 = m.y;
+            m.onpress(m);
         };
         var eventUp = function(e) {
             // Create parent onmouseup event (reset Mouse state).
+            // Fire Mouse.onrelease() if inside parent bounds.
             var m = this._mouse;
             m.pressed = false;
             m.dragged = false;
             m.drag.x = 0;
             m.drag.y = 0;
+            if (!m._away()) {
+                m.onrelease(m);
+            }
         };
         var eventMove = function(e) {
             // Create parent onmousemove event (set Mouse position & drag).
+            // Fire Mouse.onmove() if mouse pressed and inside parent bounds.
+            // Fire Mouse.ondrag() if mouse pressed.
             var m = this._mouse;
             var o1 = document.documentElement || document.body;
             var o2 = absOffset(this);
@@ -2226,15 +2272,26 @@ var Mouse = Class.extend({
             }
             m.relative_x = m.relativeX = m.x / m.parent.offsetWidth;
             m.relative_y = m.relativeY = m.y / m.parent.offsetHeight;
+            if (m.pressed) {
+                m.ondrag(m);
+            } else if (!m._away()) {
+                m.onmove(m);
+            }
         };
         // Bind mouse and multi-touch events:
         attachEvent(element, "mousedown" , eventDown);
         attachEvent(element, "touchstart", eventDown);
-        attachEvent(element, "mouseup"   , eventUp); 
-        attachEvent(element, "touchend"  , eventUp);
-        attachEvent(element, "mousemove" , eventMove);
-        attachEvent(element, "touchmove" , eventMove);
+        attachEvent(window,  "mouseup"   , Function.closure(this.parent, eventUp)); 
+        attachEvent(window,  "touchend"  , Function.closure(this.parent, eventUp));
+        attachEvent(window,  "mousemove" , Function.closure(this.parent, eventMove));
+        attachEvent(window,  "touchmove" , Function.closure(this.parent, eventMove));
     },
+    
+    // These can be patched with a custom function:
+    onmove:    function(element) {},
+    onpress:   function(element) {},
+    onrelease: function(element) {},
+    ondrag:    function(element) {},
     
     cursor: function(mode) {
         /* Sets the mouse cursor (DEFAULT, HIDDEN, CROSS, POINTER, TEXT or WAIT).
@@ -2252,6 +2309,16 @@ function _uid() {
     // Returns a unique number.
     if (_uid.i === undefined) _uid.i=0;
     return ++this.i;
+}
+
+function _unselectable(element) {
+    // Disables text dragging on the given element.
+    element.onselectstart = function() { 
+        return false; 
+    };
+    element.unselectable = "on";
+    element.style.MozUserSelect = "none";
+    element.style.cursor = "default";
 }
 
 window._requestFrame = function(callback, canvas, fps) {
@@ -2305,12 +2372,14 @@ var Canvas = Class.extend({
         if (height !== undefined) {
             element.height = height;
         }
+        _unselectable(element);
         this.id = _uid();
         this.element = element; 
         this.element.style["-webkit-tap-highlight-color"] = "rgba(0,0,0,0)";
-        this.element._canvas = this;
-        this._ctx = this.element.getContext("2d"); _ctx=this._ctx; // Set the current graphics context.
+        this.element.canvas = this;
+        this._ctx = this.element.getContext("2d");
         this._ctx._canvas = this;
+        this.focus();
         this.mouse = (options.mouse != false)? new Mouse(this.element) : null;
         this.width = this.element.width;
         this.height = this.element.height;
@@ -2318,6 +2387,7 @@ var Canvas = Class.extend({
         this.fps = 0;
         this.dt = 0;
         this._time = {start: null, current: null};
+        this._step = 0;
         this._active = false;
         this._widgets = [];
         this.variables = [];
@@ -2358,6 +2428,10 @@ var Canvas = Class.extend({
         this.variables = [];
     },
     
+    focus: function() {
+        _ctx = this._ctx; // Set the current graphics context.
+    },
+    
     size: function(width, height) {
         this.width = this.element.width = width;
         this.height = this.element.height = height;
@@ -2378,9 +2452,9 @@ var Canvas = Class.extend({
     },
     
     _setup: function() {
-        _ctx = this._ctx; // Set the current graphics context.
-        push();
         this._resetState();
+        this.focus();
+        push();
         try {
             this.setup(this);
         } catch(e) {
@@ -2390,7 +2464,9 @@ var Canvas = Class.extend({
     },
     
     _draw: function() {
-        if (!this._active) {
+        if (this._active == false && !(this._step > this.frame)) {
+            // Drawing halts after stop(), pause() or step().
+            // If step() is called, we first need to draw one more frame.
             return;
         }
         var t = new Date;
@@ -2398,8 +2474,9 @@ var Canvas = Class.extend({
         this.fps = Math.round(this.fps * 100) / 100;
         this.dt = (t - this._time.current) / 1000;
         this._time.current = t;
+        this._step = 0;
         this.frame++;
-        _ctx = this._ctx; // Set the current graphics context.
+        this.focus()
         push();
         this._resetState();
         try {
@@ -2408,7 +2485,6 @@ var Canvas = Class.extend({
             this.onerror(e); throw e;
         }
         pop();
-        // Schedule the next frame and store its process id:
         this._scheduled = window._requestFrame(this._draw, this);
     },
     
@@ -2458,15 +2534,22 @@ var Canvas = Class.extend({
     step: function() {
         /* Draws one frame and pauses.
          */
+        this._step = this.frame+1;
         this.run();
         this.pause();
     },
 
     image: function() {
+        /* Returns a new Image with the contents of the canvas.
+         * Throws a security error if the canvas contains remote (cross-domain) images.
+         */
         return new Image(this.element, {width: this.width, height: this.height});
     },
     
     save: function() {
+        /* Returns a data:image/png base64-encoded string.
+         * Throws a security error if the canvas contains remote (cross-domain) images.
+         */
         //var w = window.open();
         //w.document.body.innerHTML = "<img src=\"" + Canvas.save() + "\" />";
         return this.element.toDataURL("image/png");
@@ -2664,12 +2747,14 @@ var FUNCTION = "function";
 function widget(canvas, variable, type, options) {
     /* Creates a widget linked to the given canvas.
      * The type of the widget can be STRING or NUMBER (field), BOOLEAN (checkbox),
-     * RANGE (slider), LIST (dropdown list), or FUNCTION (bottom)
+     * RANGE (slider), LIST (dropdown list), or FUNCTION (button).
      * The value of the widget can be retrieved as canvas.variables[variable] (or canvas.variables.variable).
      * Optionally, a default value can be given. 
      * For lists, this is an array.
      * For sliders, you can also set min, max and step.
      * For functions, an optional callback(event){} must be given.
+     * To get at the current canvas from inside the callback, use event.target.canvas.
+     * Use event.target.canvas.focus() if drawing occurs in the callback.
      */
     var v = variable;
     var o = options || {};
@@ -2708,9 +2793,9 @@ function widget(canvas, variable, type, options) {
         // <select id="id"><option value="value[i]">value[i]</option>...</select>
         } else if (type == LIST || type == ARRAY) {
             var s = "";
-            var a = o.value || [];
+            var a = o.value || [""];
             for (var i=0; i < a.length; i++) {
-                s += "<option value='"+a[i]+"'>"+a[i]+"</option>";
+                s += "<option "+(o.index==i?"selected ":"")+"value='"+a[i]+"'>"+a[i]+"</option>";
             }
             s = "<select id='"+v+"'>"+s+"</select>";
             f = function(e) { canvas.variables[this.id] = this.options[this.selectedIndex].value; cb(e); };

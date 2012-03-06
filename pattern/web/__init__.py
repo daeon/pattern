@@ -1,10 +1,10 @@
-#### PATTERN | WEB ###################################################################################
+#### PATTERN | WEB #################################################################################
 # Copyright (c) 2010 University of Antwerp, Belgium
 # Author: Tom De Smedt <tom@organisms.be>
 # License: BSD (see LICENSE.txt for details).
 # http://www.clips.ua.ac.be/pages/pattern
 
-######################################################################################################
+####################################################################################################
 # Python API interface for various web services (Google, Twitter, Wikipedia, ...)
 
 # smgllib.py is removed from Python 3, a warning is issued in Python 2.6+. Ignore for now.
@@ -33,7 +33,7 @@ from soup import BeautifulSoup
 try:
     # Import persistent Cache.
     # If this module is used separately, a dict is used (i.e. for this Python session only).
-    from cache import Cache, cache
+    from cache import Cache, cache, TMP
 except:
     cache = {}
 
@@ -49,7 +49,7 @@ try:
 except:
     MODULE = ""
 
-#### UNICODE #########################################################################################
+#### UNICODE #######################################################################################
 
 def decode_utf8(string):
     """ Returns the given string as a unicode string (if possible).
@@ -79,7 +79,7 @@ s = encode_utf8
 # For clearer source code:
 bytestring = s
 
-#### ASYNCHRONOUS REQUEST ############################################################################
+#### ASYNCHRONOUS REQUEST ##########################################################################
 
 class AsynchronousRequest:
     
@@ -100,6 +100,8 @@ class AsynchronousRequest:
         self._thread.start()
         
     def _fetch(self, function, *args, **kwargs):
+        """ Executes the function and sets AsynchronousRequest.response.
+        """
         try: 
             self._response = function(*args, **kwargs)
         except Exception, e:
@@ -127,14 +129,17 @@ class AsynchronousRequest:
         return "AsynchronousRequest(function='%s')" % self._function.__name__
 
 def asynchronous(function, *args, **kwargs):
+    """ Returns an AsynchronousRequest object for the given function.
+    """
     return AsynchronousRequest(function, *args, **kwargs)
+    
 send = asynchronous
 
-#### URL #############################################################################################
+#### URL ###########################################################################################
 
 # User agent and referrer.
 # Used to identify the application accessing the web.
-USER_AGENT = "Pattern/2.0 +http://www.clips.ua.ac.be/pages/pattern"
+USER_AGENT = "Pattern/2.3 +http://www.clips.ua.ac.be/pages/pattern"
 REFERRER   = "http://www.clips.ua.ac.be/pages/pattern"
 
 # Mozilla user agent.
@@ -163,23 +168,27 @@ MIMETYPE_ARCHIVE    = ["application/x-stuffit", "application/x-tar", "applicatio
 MIMETYPE_SCRIPT     = ["application/javascript", "application/ecmascript"]
 
 def extension(filename):
+    """ Returns the extension in the given filename: "cat.jpg" => ".jpg".
+    """
     return os.path.splitext(filename)[1]
 
 def urldecode(query):
     """ Inverse operation of urllib.urlencode.
         Returns a dictionary of (name, value)-items from a URL query string.
     """
-    def _parse_number(s):
+    def _format(s):
+        if s == "None":
+             return None
         if s.isdigit(): 
              return int(s)
         try: return float(s)
         except:
              return s
     query = [(kv.split("=")+[None])[:2] for kv in query.lstrip("?").split("&")]
-    query = [(urllib.unquote_plus(bytestring(k)), urllib.unquote_plus(bytestring(v))) for k,v in query]
-    query = [(u(k), u(v)) for k,v in query]
-    query = [(k, _parse_number(v) or None) for k,v in query]
-    query = dict([(k,v) for k,v in query if k!=""])
+    query = [(urllib.unquote_plus(bytestring(k)), urllib.unquote_plus(bytestring(v))) for k, v in query]
+    query = [(u(k), u(v)) for k, v in query]
+    query = [(k, _format(v) or None) for k, v in query]
+    query = dict([(k,v) for k, v in query if k != ""])
     return query
     
 url_decode = urldecode
@@ -249,7 +258,6 @@ class URL:
             For example: http://user:pass@example.com:992/animal/bird?species=seagull&q#wings
             This is a cached method that is only invoked when necessary, and only once.
         """
-        
         p = urlparse.urlsplit(self._string)
         P = {PROTOCOL: p[0],            # http
              USERNAME: u"",             # user
@@ -292,11 +300,15 @@ class URL:
     
     @property
     def parts(self):
+        """ Yields a dictionary with the URL parts.
+        """
         if not self._parts: self._parse()
         return self._parts
     
     @property
     def querystring(self):
+        """ Yields the URL querystring: "www.example.com?page=1" => "page=1"
+        """
         s = dict((bytestring(k), bytestring(v or "")) for k, v in self.parts[QUERY].items())
         s = urllib.urlencode(s)
         return s
@@ -349,9 +361,9 @@ class URL:
         except ValueError:
             raise URLError
             
-    def download(self, timeout=10, cached=True, throttle=0, proxy=None, user_agent=USER_AGENT, referrer=REFERRER, filename=""):
+    def download(self, timeout=10, cached=True, throttle=0, proxy=None, user_agent=USER_AGENT, referrer=REFERRER, filename="", unicode=False):
         """ Downloads the content at the given URL (by default it will be cached locally).
-            The content is returned as a unicode string.
+            Unless unicode=False, the content is returned as a unicode string.
         """
         # Filter OAuth parameters from cache id (they will be unique for each request).
         if self._parts is None and self.method == GET and "oauth_" not in self._string:
@@ -359,12 +371,19 @@ class URL:
         else: 
             id = repr(self.parts)
             id = re.sub("u{0,1}'oauth_.*?': u{0,1}'.*?', ", "", id)
+        # Keep a separate cache of unicode and raw download for same URL.
+        if unicode is True:
+            id = "u" + id
         if cached and id in cache:
-            return cache[id]
+            if unicode is True:
+                return cache[id]
+            if unicode is False:
+                return cache.get(id, unicode=False)
         t = time.time()
         # Open a connection with the given settings, read it and (by default) cache the data.
         data = self.open(timeout, proxy, user_agent, referrer).read()
-        data = u(data)
+        if unicode is True:
+            data = u(data)
         if cached:
             cache[id] = data
         if throttle:
@@ -458,9 +477,10 @@ class URL:
 
 #url = URL("http://user:pass@example.com:992/animal/bird?species#wings")
 #print url.parts
+#print url.query
 #print url.string
 
-#--- FIND URLs ---------------------------------------------------------------------------------------
+#--- FIND URLs -------------------------------------------------------------------------------------
 
 RE_URL_HEAD = r"[\s|\(\>]"                                         # Preceded by space, parenthesis or HTML tag.
 RE_URL_TAIL = r"[%s]*[\s|\<]" % "|".join(".,)")                    # Followed by space, punctuation or HTML tag.
@@ -485,7 +505,7 @@ def find_urls(string, unique=True):
         for m in p.finditer(" %s " % string):
             s = m.group(1)
             i = m.start()
-            if s.endswith(("'","\"",">")) and i >= 7 and string[i-7:i-2].lower() == "href=":
+            if s.endswith(("'", "\"", ">")) and i >= 7 and string[i-7:i-2].lower() == "href=":
                 # For <a href="http://google.com">,
                 # the link is http://google.com and not http://google.com">
                 s = s.rstrip("\"'>")
@@ -517,7 +537,7 @@ def find_between(a, b, string):
     p = re.compile(p, re.DOTALL | re.I)
     return [m for m in p.findall(string)]
 
-#### PLAIN TEXT ######################################################################################
+#### PLAIN TEXT ####################################################################################
 
 BLOCK = [
     "title", "h1", "h2", "h3", "h4", "h5", "h6", "p", 
@@ -530,7 +550,7 @@ SELF_CLOSING = ["br", "hr", "img"]
 # Block-level elements are followed by linebreaks,
 # list items are preceded by an asterisk ("*").
 LIST_ITEM = "*"
-blocks = dict.fromkeys(BLOCK+["br","tr","td"], ("", "\n\n"))
+blocks = dict.fromkeys(BLOCK+["br", "tr", "td"], ("", "\n\n"))
 blocks.update({
     "li": ("%s " % LIST_ITEM, "\n"),
    "img": ("", ""),
@@ -613,7 +633,7 @@ class HTMLTagstripper(HTMLParser):
             # Create the tag attribute string, 
             # including attributes defined in the HTMLTagStripper._exclude dict.
             a = len(self._exclude[tag]) > 0 and attributes or []
-            a = ["%s=\"%s\"" % (k,v) for k,v in a if k in self._exclude[tag]]
+            a = ["%s=\"%s\"" % (k,v) for k, v in a if k in self._exclude[tag]]
             a = (" "+" ".join(a)).rstrip()
             self._data.append("<%s%s>" % (tag, a))
         if tag in self._replace: 
@@ -703,6 +723,8 @@ def encode_entities(string):
     return string
 
 def decode_entities(string):
+    """ Decodes HTML entities in the given string ("&lt;" => "<").
+    """
     # http://snippets.dzone.com/posts/show/4569
     def replace_entity(match):
         hash, hex, name = match.group(1), match.group(2), match.group(3)
@@ -786,7 +808,7 @@ def plaintext(html, keep=[], replace=blocks, linebreaks=2, indentation=False):
     html = html.strip()
     return html
 
-#### SEARCH ENGINE ###################################################################################
+#### SEARCH ENGINE #################################################################################
 
 SEARCH    = "search"    # Query for pages (i.e. links to websites).
 IMAGE     = "image"     # Query for images.
@@ -835,7 +857,7 @@ class Result(dict):
     def update(self, *args, **kwargs):
         map = dict()
         map.update(*args, **kwargs)
-        dict.update(self, [(u(k), u(v)) for k,v in map.items()])
+        dict.update(self, [(u(k), u(v)) for k, v in map.items()])
 
     def __repr__(self):
         return "Result(url=%s)" % repr(self.url)
@@ -878,7 +900,7 @@ class SearchEngineTypeError(SearchEngineError):
 class SearchEngineLimitError(SearchEngineError):
     pass # Raised when the query limit for a license is reached.
 
-#--- GOOGLE ------------------------------------------------------------------------------------------
+#--- GOOGLE ----------------------------------------------------------------------------------------
 # Google Custom Search is a paid service.
 # https://code.google.com/apis/console/
 # http://code.google.com/apis/customsearch/v1/overview.html
@@ -920,6 +942,7 @@ class Google(SearchEngine):
         if self.language is not None:
             url.query["lr"] = "lang_" + self.language
         # 3) Parse JSON response.
+        kwargs.setdefault("unicode", True)
         kwargs.setdefault("throttle", self.throttle)
         data = url.download(cached=cached, **kwargs)
         data = json.loads(data)
@@ -954,18 +977,19 @@ class Google(SearchEngine):
             "target": output
         })
         kwargs.setdefault("cached", False)
+        kwargs.setdefault("unicode", True)
         kwargs.setdefault("throttle", self.throttle)
         try:
             data = url.download(**kwargs)
         except HTTP403Forbidden:
-            raise HTTP401Authentication
+            raise HTTP401Authentication, "Google translate API is a paid service"
         data = json.loads(data)
         data = data.get("data", {}).get("translations", [{}])[0].get("translatedText", "")
         data = decode_entities(data)
         return u(data)
         
     def identify(self, string, **kwargs):
-        """ Returns a (language, reliability)-tuple for the given string.
+        """ Returns a (language, confidence)-tuple for the given string.
             Google Translate is a paid service, license without billing raises HTTP401Authentication.
         """
         url = URL("https://www.googleapis.com/language/translate/v2/detect?", method=GET, query={
@@ -973,17 +997,18 @@ class Google(SearchEngine):
                  "q": string[:1000]
         })
         kwargs.setdefault("cached", False)
+        kwargs.setdefault("unicode", True)
         kwargs.setdefault("throttle", self.throttle)
         try:
             data = url.download(**kwargs)
         except HTTP403Forbidden:
-            raise HTTP401Authentication
+            raise HTTP401Authentication, "Google translate API is a paid service"
         data = json.loads(data)
         data = data.get("data", {}).get("detections", [[{}]])[0][0]
         data = u(data.get("language")), float(data.get("confidence"))
         return data
 
-#--- YAHOO -------------------------------------------------------------------------------------------
+#--- YAHOO -----------------------------------------------------------------------------------------
 # Yahoo BOSS is a paid service.
 # http://developer.yahoo.com/search/
 
@@ -1034,11 +1059,12 @@ class Yahoo(SearchEngine):
         })
         url.query["oauth_signature"] = oauth.sign(url.string.split("?")[0], url.query, method=GET, secret=self.license[1])
         # 3) Parse JSON response.
+        kwargs.setdefault("unicode", True)
         kwargs.setdefault("throttle", self.throttle)
         try: 
             data = url.download(cached=cached, **kwargs)
         except HTTP401Authentication:
-            raise HTTP401Authentication
+            raise HTTP401Authentication, "Yahoo search API is a paid service"
         except HTTP403Forbidden:
             raise SearchEngineLimitError
         data = json.loads(data)
@@ -1058,7 +1084,7 @@ class Yahoo(SearchEngine):
             results.append(r)
         return results
 
-#--- BING --------------------------------------------------------------------------------------------
+#--- BING ------------------------------------------------------------------------------------------
 # http://www.bing.com/developers/s/APIBasics.html
 # http://www.bing.com/developers/createapp.aspx
 
@@ -1108,6 +1134,7 @@ class Bing(SearchEngine):
             if market:
                 url.query["market"] = market
         # 3) Parse JSON response.
+        kwargs.setdefault("unicode", True)
         kwargs.setdefault("throttle", self.throttle)
         data = url.download(cached=cached, **kwargs)
         data = json.loads(data)
@@ -1124,7 +1151,7 @@ class Bing(SearchEngine):
             results.append(r)
         return results
 
-#--- TWITTER -----------------------------------------------------------------------------------------
+#--- TWITTER ---------------------------------------------------------------------------------------
 # http://apiwiki.twitter.com/
 
 TWITTER = "http://search.twitter.com/"
@@ -1166,6 +1193,7 @@ class Twitter(SearchEngine):
         # 2) Restrict language.
         url.query["lang"] = self.language or ""
         # 3) Parse JSON response.
+        kwargs.setdefault("unicode", True)
         kwargs.setdefault("throttle", self.throttle)
         try: 
             data = URL(url).download(cached=cached, **kwargs)
@@ -1190,6 +1218,7 @@ class Twitter(SearchEngine):
         """
         url = URL("https://api.twitter.com/1/trends/1.json")
         kwargs.setdefault("cached", False)
+        kwargs.setdefault("unicode", True)
         kwargs.setdefault("throttle", self.throttle)
         data = url.download(**kwargs)
         data = json.loads(data)
@@ -1204,14 +1233,14 @@ def author(name):
 def hashtags(string):
     """ Returns a list of hashtags (words starting with a #hash) from a tweet.
     """
-    return [b for a,b in TWITTER_HASHTAG.findall(string)]
+    return [b for a, b in TWITTER_HASHTAG.findall(string)]
     
 def retweets(string):
     """ Returns a list of retweets (words starting with a RT @author) from a tweet.
     """
-    return [b for a,b in TWITTER_RETWEET.findall(string)]
+    return [b for a, b in TWITTER_RETWEET.findall(string)]
 
-#--- WIKIPEDIA ---------------------------------------------------------------------------------------
+#--- WIKIPEDIA -------------------------------------------------------------------------------------
 # http://en.wikipedia.org/w/api.php
 
 WIKIPEDIA = "http://en.wikipedia.org/w/api.php"
@@ -1254,6 +1283,7 @@ class Wikipedia(SearchEngine):
             "format": "json"
         })
         # 2) Parse JSON response.
+        kwargs.setdefault("unicode", True)
         kwargs.setdefault("timeout", 30) # Parsing the article takes some time.
         kwargs.setdefault("throttle", self.throttle)
         data = url.download(cached=cached, **kwargs)
@@ -1329,7 +1359,7 @@ class WikipediaArticle:
         self.languages      = languages      # Dictionary of (language, article)-items, e.g. Cat => ("nl", "Kat")
         self.language       = kwargs.get("language", "en")
         self.disambiguation = disambiguation # True when the article is a disambiguation page.
-        for k,v in kwargs.items():
+        for k, v in kwargs.items():
             setattr(self, k, v)
     
     def download(self, media, **kwargs):
@@ -1489,7 +1519,7 @@ class WikipediaTable:
 #article = Wikipedia(language="nl").search("borrelnootje")
 #print article.string
 
-#--- FLICKR ------------------------------------------------------------------------------------------
+#--- FLICKR ----------------------------------------------------------------------------------------
 # http://www.flickr.com/services/api/
 
 FLICKR = "http://api.flickr.com/services/rest/"
@@ -1534,6 +1564,7 @@ class Flickr(SearchEngine):
             # 7: "No known copyright restriction"
             url.query["license"] = "5,7"
         # 2) Parse XML response.
+        kwargs.setdefault("unicode", True)
         kwargs.setdefault("throttle", self.throttle)
         data = url.download(cached=cached, **kwargs)
         data = xml.dom.minidom.parseString(bytestring(data))
@@ -1558,7 +1589,7 @@ class FlickrResult(Result):
         # Note: the "Original" size no longer appears in the response,
         # so Flickr might not like it if we download it.
         url = FLICKR + "?method=flickr.photos.getSizes&photo_id=%s&api_key=%s" % (self._id, self._license)
-        data = URL(url).download(throttle=self._throttle)
+        data = URL(url).download(throttle=self._throttle, unicode=True)
         data = xml.dom.minidom.parseString(bytestring(data))
         size = { TINY: "Thumbnail", 
                 SMALL: "Small", 
@@ -1582,7 +1613,7 @@ class FlickrResult(Result):
 #f.write(data)
 #f.close()
 
-#--- FACEBOOK ----------------------------------------------------------------------------------------
+#--- FACEBOOK --------------------------------------------------------------------------------------
 # Facebook public status updates.
 # Author: Rajesh Nair, 2012.
 # https://developers.facebook.com/docs/reference/api/
@@ -1614,8 +1645,9 @@ class Facebook(SearchEngine):
              "limit": min(count, 100),
             "fields": "link,message,from"
         })
+        kwargs.setdefault("unicode", True)
         kwargs.setdefault("throttle", self.throttle)
-        data = URL(url).download(cached=cached,**kwargs)
+        data = URL(url).download(cached=cached, **kwargs)
         data = json.loads(data)
         results = Results(FACEBOOK, query, SEARCH)
         results.total = None
@@ -1628,7 +1660,7 @@ class Facebook(SearchEngine):
             results.append(r)
         return results
 
-#--- PRODUCT REVIEWS ---------------------------------------------------------------------------------
+#--- PRODUCT REVIEWS -------------------------------------------------------------------------------
 
 PRODUCTWIKI = "http://api.productwiki.com/connect/api.aspx"
 PRODUCTWIKI_LICENSE = api.license["Products"] 
@@ -1662,6 +1694,7 @@ class Products(SearchEngine):
             "format": "json"
         })
         # 2) Parse JSON response.
+        kwargs.setdefault("unicode", True)
         kwargs.setdefault("throttle", self.throttle)
         data = URL(url).download(cached=cached, **kwargs)
         data = json.loads(data)
@@ -1689,7 +1722,7 @@ class Products(SearchEngine):
 #    print r.reviews
 #    print
 
-#--- NEWS FEED ---------------------------------------------------------------------------------------
+#--- NEWS FEED -------------------------------------------------------------------------------------
 # Based on the Universal Feed Parser by Mark Pilgrim:
 # http://www.feedparser.org/
 
@@ -1707,6 +1740,7 @@ class Newsfeed(SearchEngine):
             return Results(query, query, NEWS)
         # 1) Construct request URL.
         # 2) Parse RSS/Atom response.
+        kwargs.setdefault("unicode", True)
         kwargs.setdefault("throttle", self.throttle)
         data = URL(query).download(cached=cached, **kwargs)
         data = feedparser.parse(bytestring(data))
@@ -1744,7 +1778,7 @@ feeds = {
 #    print plaintext(r.description)
 #    print
 
-#--- WEB SORT ----------------------------------------------------------------------------------------
+#--- WEB SORT --------------------------------------------------------------------------------------
 
 SERVICES = {
     GOOGLE    : Google,
@@ -1783,7 +1817,7 @@ def sort(terms=[], context="", service=GOOGLE, license=None, strict=True, revers
 
 #print sort(["black", "happy"], "darth vader", GOOGLE)
 
-#### DOCUMENT OBJECT MODEL ###########################################################################
+#### DOCUMENT OBJECT MODEL #########################################################################
 # Tree traversal of HTML source code.
 # The Document Object Model (DOM) is a cross-platform and language-independent convention 
 # for representing and interacting with objects in HTML, XHTML and XML documents.
@@ -1801,7 +1835,7 @@ SOUP = (
 NODE, TEXT, COMMENT, ELEMENT, DOCUMENT = \
     "node", "text", "comment", "element", "document"
 
-#--- NODE --------------------------------------------------------------------------------------------
+#--- NODE ------------------------------------------------------------------------------------------
 
 class Node:
     
@@ -1871,7 +1905,7 @@ class Node:
     def __unicode__(self):
         return u(self._p)
 
-#--- TEXT --------------------------------------------------------------------------------------------
+#--- TEXT ------------------------------------------------------------------------------------------
 
 class Text(Node):
     """ Text represents a chunk of text without formatting in a HTML document.
@@ -1891,7 +1925,7 @@ class Comment(Text):
     def __repr__(self):
         return "Comment(%s)" % repr(self._p)
 
-#--- ELEMENT -----------------------------------------------------------------------------------------
+#--- ELEMENT ---------------------------------------------------------------------------------------
 
 class Element(Node):
     
@@ -1963,7 +1997,7 @@ class Element(Node):
     def __repr__(self):
         return "Element(tag='%s')" % bytestring(self.tagname)
 
-#--- DOCUMENT ----------------------------------------------------------------------------------------
+#--- DOCUMENT --------------------------------------------------------------------------------------
 
 class Document(Element):
     
@@ -1973,7 +2007,7 @@ class Document(Element):
         """
         # Aliases for BeautifulSoup optional parameters: 
         kwargs["selfClosingTags"] = kwargs.pop("self_closing", kwargs.get("selfClosingTags"))
-        Node.__init__(self, html.strip(), type=DOCUMENT, **kwargs)
+        Node.__init__(self, u(html).strip(), type=DOCUMENT, **kwargs)
 
     @property
     def declaration(self):
@@ -2004,7 +2038,7 @@ class Document(Element):
 #print dom.get_elements_by_tagname("p")[0].next.previous.children[0].parent.__class__
 #print
 
-#### WEB CRAWLER #####################################################################################
+#### WEB CRAWLER ###################################################################################
 # Tested with a crawl across 1,000 domain so far.
 
 class Link:
@@ -2091,7 +2125,7 @@ class Spider:
         self.delay    = delay   # Delay between visits to the same (sub)domain.
         self.domains  = domains # Domains the spider is allowed to visit.
         self.history  = {}      # Domain name => time last visited.
-        self.visited  = {}      # URLs visited => backlink count (0 = scheduled).
+        self.visited  = {}      # URLs visited.
         self._queue   = []      # URLs scheduled for a visit: (priority, time, Link).
         self._queued  = {}      # URLs scheduled so far, lookup dictionary.
         self.QUEUE    = 10000   # Increase or decrease according to available memory.
@@ -2122,7 +2156,7 @@ class Spider:
                 return link
     
     def crawl(self, method=DEPTH, **kwargs):
-        """ Visits the next link in Spider.queue.
+        """ Visits the next link in Spider._queue.
             If the link is on a domain recently visited (< Spider.delay) it is skipped.
             Parses the content at the link for new links and adds them to the queue,
             according to their Spider.priority().
@@ -2135,6 +2169,7 @@ class Spider:
             url = URL(link.url)
             if url.mimetype == "text/html":
                 try:
+                    kwargs.setdefault("unicode", True)
                     html = url.download(**kwargs)
                     for new in self.parse(html, url=link.url):
                         new.url = abs(new.url, base=url.redirect or link.url)
@@ -2229,7 +2264,7 @@ class Spider:
 #while not s.done:
 #    s.crawl(method=DEPTH, cached=True, throttle=5)
 
-#### PDF PARSER #######################################################################################
+#### PDF PARSER ####################################################################################
 #  Yusuke Shinyama, PDFMiner, http://www.unixuser.org/~euske/python/pdfminer/
 
 class PDFParseError(Exception):
@@ -2279,7 +2314,7 @@ class PDF:
         s = collapse_spaces(s)
         return s
 
-#######################################################################################################
+####################################################################################################
 
 def test():
     # A shallow test to see if all the services can be reached.

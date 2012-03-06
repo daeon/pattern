@@ -27,23 +27,23 @@
         <div id="node-1350" class="node node-type-page"><div class="node-inner">
 <div class="content">
 <p><span class="big">Pattern is a web mining module for the Python programming language.</span></p>
-<p><span class="big">It bundles tools for data retrieval (Google + Twitter + Wikipedia API, web spider, HTML DOM parser), text analysis (rule-based shallow parser, WordNet interface, syntactical + semantical n-gram search algorithm, tf-idf + cosine similarity + LSA metrics) and data visualization (graph networks).</span></p>
-<p>The module is bundled with 30+ example scripts.</p>
-<p><img src="../g/pattern_schema.gif" alt="" width="606" height="180" /></p>
+<p><span class="big">It bundles tools for data retrieval (Google + Twitter + Wikipedia API, web spider, HTML DOM parser), text analysis (rule-based shallow parser, WordNet interface, syntactical + semantical n-gram search algorithm, tf-idf + cosine similarity + LSA metrics), clustering and classification (k-means, KNN, SVM), and data visualization (graph networks).</span></p>
+<p>The module is bundled with 30+ example scripts and 350+ unit tests.</p>
+<p><img src="../g/pattern_schema.gif" alt="" width="620" height="180" /></p>
 <hr />
 <h2>Download</h2>
 <table>
 <tbody>
 <tr>
-<td><a onclick="javascript:_gaq.push(['_trackPageview', '/downloads/pattern']);" href="http://www.clips.ua.ac.be/media/pattern-2.2.zip" target="_self"><img src="../g/download.gif" alt="download" align="left" /></a></td>
-<td><strong>Pattern 2.2</strong>&nbsp;| <a onclick="javascript:_gaq.push(['_trackPageview', '/downloads/pattern']);" href="http://www.clips.ua.ac.be/media/pattern-2.2.zip" target="_self">download</a> (12MB)
+<td><a onclick="javascript:_gaq.push(['_trackPageview', '/downloads/pattern']);" href="http://www.clips.ua.ac.be/media/pattern-2.3.zip" target="_self"><img src="../g/download.gif" alt="download" align="left" /></a></td>
+<td><strong>Pattern 2.3</strong>&nbsp;| <a onclick="javascript:_gaq.push(['_trackPageview', '/downloads/pattern']);" href="http://www.clips.ua.ac.be/media/pattern-2.3.zip" target="_self">download</a> (16MB)
 <ul>
 <li>Requires: Python 2.4+ on Windows | Mac | Unix</li>
 <li>Licensed under <a href="http://www.linfo.org/bsdlicense.html" target="_blank">BSD</a></li>
-<li>Latest releases: <a href="http://www.clips.ua.ac.be/media/pattern-2.2.zip">2.2</a> |&nbsp;<a href="http://www.clips.ua.ac.be/media/pattern-2.1.zip">2.1</a> |&nbsp;<a href="http://www.clips.ua.ac.be/media/pattern-2.0.zip">2.0</a> |&nbsp;<a style="color: #1e90ff; outline-style: none !important; outline-width: initial !important; outline-color: initial !important;" href="http://www.clips.ua.ac.be/media/pattern-1.9.zip">1.9</a>&nbsp;|&nbsp;<a style="color: #1e90ff; outline-style: none !important; outline-width: initial !important; outline-color: initial !important;" href="http://www.clips.ua.ac.be/media/pattern-1.8.zip">1.8</a></li>
+<li>Latest releases:&nbsp;<a style="color: #1e90ff; outline-style: none !important; outline-width: initial !important; outline-color: initial !important;" href="http://www.clips.ua.ac.be/media/pattern-2.3.zip">2.3</a>&nbsp;|&nbsp;<a href="http://www.clips.ua.ac.be/media/pattern-2.2.zip">2.2</a> |&nbsp;<a href="http://www.clips.ua.ac.be/media/pattern-2.1.zip">2.1</a> |&nbsp;<a href="http://www.clips.ua.ac.be/media/pattern-2.0.zip">2.0</a> |&nbsp;<a style="color: #1e90ff; outline-style: none !important; outline-width: initial !important; outline-color: initial !important;" href="http://www.clips.ua.ac.be/media/pattern-1.9.zip">1.9</a></li>
 <li>Author:<br />Tom De Smedt (<em>tom at organisms.be</em>)</li>
 </ul>
-<p><span class="small"><span style="text-decoration: underline;">Reference</span>: De Smedt, T. &amp; Daelemans, W. (2011)</span>.<br /><span class="small">Pattern version 2.2, retrieved October 2011, from: http://www.clips.ua.ac.be/</span></p>
+<p><span class="small"><span style="text-decoration: underline;">Reference</span>: De Smedt, T. &amp; Daelemans, W. (2011)</span>.<br /><span class="small">Pattern version 2.3, retrieved October 2011, from: http://www.clips.ua.ac.be/</span></p>
 </td>
 <td>
 </td>
@@ -68,6 +68,7 @@
 <p><span class="smallcaps">Helper modules</span></p>
 <ul style="margin-top: 0;">
 <li><a href="pattern-metrics.html">pattern.metrics</a></li>
+<li><a href="pattern-canvas.html">canvas.js</a></li>
 </ul>
 <p><span class="smallcaps">Command-line</span></p>
 <ul style="margin-top: 0;">
@@ -77,6 +78,7 @@
 <td>
 <h2>Contribute</h2>
 <ul>
+<li><a href="pattern-dev.html">Developer documentation</a></li>
 <li><a href="https://github.com/clips/pattern" target="_blank">GitHub repository</a></li>
 <li><a href="http://groups.google.com/group/pattern-for-python" target="_blank">Google group</a></li>
 </ul>
@@ -89,7 +91,7 @@
 <h2>Installation</h2>
 <p>Pattern is written for Python 2.4+ (no support for Python 3 yet). The module has no external dependencies except when using LSA in the vector module, which requires <a href="http://numpy.scipy.org/" target="_blank">NumPy</a> (installed by default on Mac OS X).</p>
 <p>To install it so that the module is available in all your scripts, open a terminal and do:</p>
-<p><span class="install"><span class="geshifilter"><code class="text geshifilter-text">&gt; cd pattern-2.0<br />
+<p><span class="install"><span class="geshifilter"><code class="text geshifilter-text">&gt; cd pattern-2.3<br />
 &gt; python setup.py install </code></span></span></p>
 <p>If you have pip, you can automatically download and install from the PyPi repository:</p>
 <p><span class="install"><span class="geshifilter"><code class="text geshifilter-text">&gt; pip install pattern</code></span></span></p>
