@@ -133,7 +133,7 @@ class Node(object):
             self.graph.betweenness_centrality()
         return self._centrality
         
-    def flatten(self, depth=1, _visited=None):
+    def flatten(self, depth=1, traversable=lambda node, edge: True, _visited=None):
         """ Recursively lists the node and nodes linked to it.
             Depth 0 returns a list with the node.
             Depth 1 returns a list with the node and all the directly linked nodes.
@@ -144,7 +144,8 @@ class Node(object):
         if depth >= 1:
             for n in self.links: 
                 if n.id not in _visited or _visited[n.id][1] < depth-1:
-                    n.flatten(depth-1, _visited)
+                    if traversable(self, self.links.edges[n.id]):
+                        n.flatten(depth-1, traversable, _visited)
         return [n for n,d in _visited.values()] # Fast, but not order-preserving.
     
     def draw(self, weighted=False):
@@ -232,9 +233,9 @@ class Edge(object):
         self._weight = v
         # Clear cached adjacency map in the graph, since edge weights have changed.
         if self.node1.graph is not None: 
-            self.node1.graph._adjacency = self.node1.graph._paths = None
+            self.node1.graph._adjacency = None
         if self.node2.graph is not None: 
-            self.node2.graph._adjacency = self.node2.graph._paths = None
+            self.node2.graph._adjacency = None
     
     weight = property(_get_weight, _set_weight)
         
@@ -311,7 +312,6 @@ class Graph(dict):
         self.edges      = []   # List of Edge objects.
         self.root       = None
         self._adjacency = None # Cached adjacency() dict.
-        self._paths     = None # Cached shortest paths dict.
         self.layout     = layout==SPRING and GraphSpringLayout(self) or GraphLayout(self)
         self.distance   = distance
     
@@ -341,7 +341,7 @@ class Graph(dict):
             self[n.id] = n; n.graph = self
             self.root = kwargs.get("root", False) and n or self.root
             # Clear adjacency cache.
-            self._adjacency = self._paths = None
+            self._adjacency = None
         return n
     
     def add_edge(self, id1, id2, *args, **kwargs):
@@ -366,7 +366,7 @@ class Graph(dict):
         n1.links.append(n2, edge=e2)
         n2.links.append(n1, edge=e1 or e2)
         # Clear adjacency cache.
-        self._adjacency = self._paths = None
+        self._adjacency = None
         return e2        
             
     def remove(self, x):
@@ -385,7 +385,7 @@ class Graph(dict):
         if isinstance(x, Edge):
             self.edges.remove(x)
         # Clear adjacency cache.
-        self._adjacency = self._paths = None
+        self._adjacency = None
     
     def node(self, id):
         """ Returns the node in the graph with the given id.
@@ -413,21 +413,9 @@ class Graph(dict):
             node1 = self[node1]
         if not isinstance(node2, Node): 
             node2 = self[node2]
-        # Cache reversed path if directed=False.
-        id1 = (node1.id, node2.id, heuristic, directed)
-        id2 = (node2.id, node1.id, heuristic, directed)
-        if self._paths is not None and id1 in self._paths:
-            return self._paths[id1]
         try: 
             p = dijkstra_shortest_path(self, node1.id, node2.id, heuristic, directed)
             p = [self[id] for id in p]
-            if self._paths is None or len(self._paths) > 1000:
-                self._paths = {}
-            if directed is True:
-                self._paths[id1] = p
-            if directed is False:
-                self._paths[id1] = p
-                self._paths[id2] = list(reversed(p))
             return p
         except IndexError:
             return None
@@ -749,8 +737,11 @@ def adjacency(graph, directed=False, reversed=False, stochastic=False, heuristic
         A heuristic function can be given that takes two node id's and returns
         an additional cost for movement between the two nodes.
     """
+    # Caching a heuristic from a method won't work.
+    # Bound method objects are transient, 
+    # i.e., id(object.method) returns a new value each time.
     if graph._adjacency is not None and \
-       graph._adjacency[1:] == (directed, reversed, stochastic, heuristic):
+       graph._adjacency[1:] == (directed, reversed, stochastic, heuristic and id(heuristic)):
         return graph._adjacency[0]
     map = {}
     for n in graph.nodes:
@@ -768,7 +759,7 @@ def adjacency(graph, directed=False, reversed=False, stochastic=False, heuristic
             for id2 in map[id1]: 
                 map[id1][id2] /= n
     # Cache the adjacency map: this makes dijkstra_shortest_path() 2x faster in repeated use.
-    graph._adjacency = (map, directed, reversed, stochastic, heuristic)
+    graph._adjacency = (map, directed, reversed, stochastic, heuristic and id(heuristic))
     return map
 
 def dijkstra_shortest_path(graph, id1, id2, heuristic=None, directed=False):
@@ -893,30 +884,30 @@ def brandes_betweenness_centrality(graph, normalized=True, directed=False):
         heappush(Q, (0, id, id))
         S = []
         E = dict.fromkeys(graph, 0) # sigma
-        E[id] = 1
+        E[id] = 1.0
         while Q:    
             (dist, pred, v) = heappop(Q) 
-            if v in D: continue
+            if v in D: 
+                continue
             D[v] = dist
             S.append(v)
-            E[v] = E[v] + E[pred]
-            for w in W[v].iterkeys():
+            E[v] += E[pred]
+            for w in W[v]:
                 vw_dist = D[v] + W[v][w]
                 if w not in D and (w not in seen or vw_dist < seen[w]): 
                     seen[w] = vw_dist 
                     heappush(Q, (vw_dist, v, w))
                     P[w] = [v]
-                    E[w] = 0
-                if vw_dist == seen[w]: # Handle equal paths.
+                    E[w] = 0.0
+                elif vw_dist == seen[w]: # Handle equal paths.
                     P[w].append(v)
-                    E[w] = E[w] + E[v] 
-        d = dict.fromkeys(graph, 0)  
-        while S: 
-            w = S.pop() 
-            for v in P[w]: 
-                d[v] = d[v] + (float(E[v]) / float(E[w])) * (1.0 + d[w]) 
+                    E[w] += E[v] 
+        d = dict.fromkeys(graph, 0.0)  
+        for w in reversed(S):
+            for v in P[w]:
+                d[v] += (1.0 + d[w]) * E[v] / E[w]
             if w != id: 
-                b[w] = b[w] + d[w]
+                b[w] += d[w]
     # Normalize between 0.0 and 1.0.
     m = normalized and max(b.values()) or 1
     b = dict((id, w/m) for id, w in b.iteritems())

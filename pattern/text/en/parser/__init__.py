@@ -44,10 +44,8 @@ a2 = re.compile("^([A-Za-z]\.)+$")                                 # alternating
 a3 = re.compile("^[A-Z]["+"|".join("bcdfghjklmnpqrstvwxz")+"]+.$") # capital followed by consonants, "Mr."
 
 # Handle common word punctuation:
-PUNCTUATION = punctuation = (
-    ("(","[","\"","'"),                    # leading
-    (":",";",",","!","?","]",")","\"","'") # trailing
-)
+PUNCTUATION = \
+punctuation = tuple([ch for ch in ",;:!?()[]{}`''\"@#$^&*+-|=~_"])
 
 def tokenize(string, punctuation=PUNCTUATION, abbreviations=abbreviations, replace=replacements):
     """ Returns a list of sentences. Each sentence is a space-separated string of tokens (words).
@@ -61,13 +59,13 @@ def tokenize(string, punctuation=PUNCTUATION, abbreviations=abbreviations, repla
     for t in token.findall(string+" "):
         if len(t) > 0:
             tail = []
-            while t.startswith(punctuation[0]+("'",)) and not t in replace:
+            while t.startswith(punctuation) and not t in replace:
                 # Split leading punctuation.
-                if t.startswith(punctuation[0]):
+                if t.startswith(punctuation):
                     tokens.append(t[0]); t=t[1:]
-            while t.endswith(punctuation[1]+(".",)):
+            while t.endswith(punctuation+(".",)):
                 # Split trailing punctuation.
-                if t.endswith(punctuation[1]):
+                if t.endswith(punctuation):
                     tail.append(t[-1]); t=t[:-1]
                 # Split ellipsis before checking for period.
                 if t.endswith("..."):
@@ -314,8 +312,8 @@ def find_prepositions(chunked):
 #### LEMMATIZER ####################################################################################
 # Word lemmas using singularization and verb conjugation from the inflect module.
 
-try: 
-    import os, sys; sys.path.insert(0, os.path.join(MODULE, ".."))
+try:
+    import os, sys; sys.path.append(os.path.join(MODULE, ".."))
     from inflect import singularize, conjugate
 except:
     singularize = lambda w: w
@@ -352,7 +350,7 @@ def parse(s, tokenize=True, tags=True, chunks=True, relations=False, lemmata=Fal
     if isinstance(s, (list, tuple)):
         s = [s.split(" ") for s in s]
     if isinstance(s, basestring):
-        s = [s.split(" ")]
+        s = [s.split(" ") for s in s.split("\n")]
     for i in range(len(s)):
         for j in range(len(s[i])):
             # Convert tokens to Unicode.
@@ -382,6 +380,10 @@ def parse(s, tokenize=True, tags=True, chunks=True, relations=False, lemmata=Fal
     if chunks    : format.extend(("chunk", "preposition"))
     if relations : format.append("relation")
     if lemmata   : format.append("lemma")
+    # With collapse=False, returns the raw [[[token, tag], [token, tag]], ...].
+    # Note that we can't pass this output to Sentence (format is not stored).
+    if not kwargs.get("collapse", True) or kwargs.get("split", False):
+        return s
     # Collapse the output.
     # Sentences are separated by newlines, tokens by spaces, tags by slashes.
     # Slashes in words are encoded with &slash;

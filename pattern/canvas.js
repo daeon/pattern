@@ -2,7 +2,7 @@
 // Copyright (c) 2010 University of Antwerp, Belgium
 // Authors: Tom De Smedt <tom@organisms.be>
 // License: BSD (see LICENSE.txt for details).
-// Version: 1.0.
+// Version: 1.1.
 // http://www.clips.ua.ac.be/pages/pattern-canvas
 
 // The NodeBox drawing API for the HTML5 <canvas> element.
@@ -64,52 +64,66 @@ window.height = function() {
 
 // Additional array functions are invoked with Array.[function].
 
-Array.max = function(array) {
-    return Math.max.apply(Math, array);
-};
 Array.min = function(array) {
     return Math.min.apply(Math, array);
+};
+Array.max = function(array) {
+    return Math.max.apply(Math, array);
 };
 Array.sum = function(array) {
     for (var i=0, sum=0; i < array.length; sum+=array[i++]){}; return sum;
 };
 
-Array.find = function(array) {
+Array.find = function(array, match) {
     for (var i=0; i < array.length; i++) { if (match(array[i])) return i; }
 };
 
-Array.map = function(array, f) {
-    /* Returns a new array with f(value) for each value in the given array.
+Array.map = function(array, callback) {
+    /* Returns a new array with callback(value) for each value in the given array.
      */
     var a = []; 
     for (var i=0; i < array.length; i++) { 
-        a.push(f(array[i])); 
+        a.push(callback(array[i])); 
     } 
     return a;
 };
 
-Array.filter = function(array, f) {
-    /* Returns a new array with values for which f(value)==true.
+Array.filter = function(array, callback) {
+    /* Returns a new array with values for which callback(value)==true.
      */
     var a = []; 
     for (var i=0; i < array.length; i++) { 
-        if (f(array[i])) a.push(array[i]); 
+        if (callback(array[i])) a.push(array[i]); 
     } 
     return a;
 };
 
-Array.enumerate = function(array, f) {
-    /* Calls f(index, value) for each value in the given array.
+Array.enumerate = function(array, callback, that) {
+    /* Calls callback(index, value) for each value in the given array.
      */
+    callback = Function.closure(that || this, callback);
     for (var i=0; i < array.length; i++) {
-        f(i, array[i]);
+        if (callback(i, array[i]) == false) return;
     }
 };
+
+Array.eq = function(array1, array2) {
+    /* Returns true if both arrays contain the same values.
+     */
+    if (!(array1 instanceof Array) || 
+        !(array2 instanceof Array) ||  array1.length != array2.length) {
+        return false;
+    }
+	for (var i=0; i < array1.length; i++) {
+		if (array1[i] !== array2[i]) return false;
+	}
+	return true;
+}
 
 Array.sorted = function(array, reversed) {
     /* Returns a sorted copy of the given array.
      */
-    array = array.copy();
+    array = array.slice();
     array = array.sort();
     if (reversed) array = array.reverse();
     return array;
@@ -229,6 +243,13 @@ Math.radians = function(degrees) {
 
 Math.clamp = function(value, min, max) {
     return Math.max(min, Math.min(value, max));
+};
+
+Math.dot = function(a, b) {
+    var m = Math.min(a.length, b.length);
+    var n = 0;
+    for (var i = 0; i < m; i++) n += a[i] * b[i];
+    return n;
 };
 
 var Point = Class.extend({
@@ -460,13 +481,13 @@ var Color = Class.extend({
         } else if (r === undefined || r == null) {
             r=0; g=0; b=0; a=0;
         // One value, grayscale.
-        } else if (g === undefined) {
+        } else if (g === undefined || g == null) {
              a=1; g=r; b=r;
         // Two values, grayscale and alpha.
-        } else if (b === undefined) {
+        } else if (b === undefined || b == null) {
              a=g; g=r; b=r;
         // R, G and B.
-        } else if (a === undefined) {
+        } else if (a === undefined || a == null) {
             a=1;
         }
         if (options) {
@@ -480,7 +501,7 @@ var Color = Class.extend({
             }
             // Transform to color space HEX:
             if (options.colorspace == HEX) {
-                var rgb = _hex2rgb(r); r=rgb[0]; g=rgb[1]; b=rgb[2];
+                var rgb = _hex2rgb(r); r=rgb[0]; g=rgb[1]; b=rgb[2]; a=1;
             }            
         }
         this.r = r;
@@ -1982,7 +2003,7 @@ var Pixels = Class.extend({
         /* Applies a function to each pixel.
          * Function takes a list of R,G,B,A channel values and must return a similar list.
          */
-        for (var i=0; i<this.width*this.height; i++) {
+        for (var i=0; i < this.width * this.height; i++) {
             this.set(i, callback(this.get(i)))
         }
     },
@@ -2322,26 +2343,28 @@ function _unselectable(element) {
 }
 
 window._requestFrame = function(callback, canvas, fps) {
-    //var f = window.requestAnimationFrame
-    //     || window.webkitRequestAnimationFrame
-    //     || window.mozRequestAnimationFrame
-    //     || window.oRequestAnimationFrame
-    //     || window.msRequestAnimationFrame
-    //     || function(callback, element) { return window.setTimeout(callback, 1000 / (fps||100)); };
-    var f = function(callback, element) { return window.setTimeout(callback, 1000 / (fps||100)); };
+    var f = window.requestAnimationFrame
+         || window.webkitRequestAnimationFrame
+         || window.mozRequestAnimationFrame
+         || window.msRequestAnimationFrame
+         || window.oRequestAnimationFrame
+         || function(callback, element) { return window.setTimeout(callback, 1000 / (fps || 60)); };
     // When requestFrame() calls Canvas._draw() directly, the "this" keyword will be detached.
     // Make "this" available inside Canvas._draw() by binding it:
     return f(Function.closure(canvas, callback), canvas.element);
 };
 
 window._clearFrame = function(id) {
-    //var f = window.cancelAnimationFrame
-    //     || window.webkitCancelRequestAnimationFrame
-    //     || window.mozCancelRequestAnimationFrame
-    //     || window.oCancelRequestAnimationFrame
-    //     || window.msCancelRequestAnimationFrame
-    //     || window.clearTimeout;
-    var f = window.clearTimeout;
+    var f = window.cancelAnimationFrame
+         || window.webkitCancelAnimationFrame
+         || window.webkitCancelRequestAnimationFrame
+         || window.mozCancelAnimationFrame
+         || window.mozCancelRequestAnimationFrame
+         || window.msCancelAnimationFrame
+         || window.msCancelRequestAnimationFrame
+         || window.oCancelAnimationFrame
+         || window.oCancelRequestAnimationFrame
+         || window.clearTimeout;
     return f(id);
 };
 
@@ -2366,14 +2389,16 @@ var Canvas = Class.extend({
         if (!element.getContext && typeof(G_vmlCanvasManager) != "undefined") {
             element = G_vmlCanvasManager.initElement(element);
         }
-        if (width !== undefined) {
+        if (width !== undefined && 
+            width !== null) {
             element.width = width;
         }
-        if (height !== undefined) {
+        if (height !== undefined && 
+            height !== null) {
             element.height = height;
         }
         _unselectable(element);
-        this.id = _uid();
+        this.id = "canvas" + _uid();
         this.element = element; 
         this.element.style["-webkit-tap-highlight-color"] = "rgba(0,0,0,0)";
         this.element.canvas = this;
@@ -2422,7 +2447,7 @@ var Canvas = Class.extend({
             e.parentNode.removeChild(e);
             delete this[w.name];
         }
-        var p = $(this.element.id + "_widgets");
+        var p = $(this.id + "_widgets");
         if (p) p.parentNode.removeChild(p);
         this._widgets = [];
         this.variables = [];
@@ -2488,7 +2513,7 @@ var Canvas = Class.extend({
         this._scheduled = window._requestFrame(this._draw, this);
     },
     
-    run: function(fps) {
+    run: function() {
         /* Starts drawing the canvas.
          * Canvas.setup() will be called once during initialization.
          * Canvas.draw() will be called each frame. 
@@ -2647,26 +2672,53 @@ function render(callback, width, height) {
     return buffer.render();
 }
 
-/*--- FILTERS --------------------------------------------------------------------------------------*/
-
-function blur(img, amount) {
-    /* Applies a blur filter to the image and returns the blurred image.
+function filter(img, callback) {
+    /* Returns a new Image object with the given pixel function applied to it.
+     * The function that takes an array of RGBA-values (base 255) and returns a new array.
      */
-    // Source: https://github.com/flother/examples/blob/gh-pages/canvas-blur/v3/canvas-image.js
-    if (amount === undefined) amount = 1;
-    var buffer = new OffscreenBuffer(img._img.width, img._img.height);
-    buffer.draw = function(buffer) {
-        buffer._ctx.drawImage(img._img, 0, 0);
-        buffer._ctx.globalAlpha = 0.1;
-        for (var i=1; i<=amount; i++) {
-            for (var y=-1; y<2; y++) {
-                for (var x=-1; x<2; x++) {
-                    buffer._ctx.drawImage(buffer.element, x, y);
-                }
-            }
-        }
-    }
-    return buffer.render();
+    var pixels = new Pixels(img);
+    pixels.map(callback);
+    pixels.update();
+    return pixels.image();
+}
+
+/*##################################################################################################*/
+
+/*--- IMAGE FILTERS | GENERATORS -------------------------------------------------------------------*/
+
+function solid(width, height, clr) { 
+    /* Returns an image with a solid fill color.
+     */
+    return render(function(canvas) { 
+        rect(0, 0, width, height, {fill: clr || [0,0,0,0]}); 
+    }, width, height);
+}
+
+/*--- IMAGE FILTERS | COLOR ------------------------------------------------------------------------*/
+
+function invert(img) {
+    /* Returns an image with inverted colors (e.g. white becomes black).
+     */
+    return filter(img, function(p) {
+        return [255-p[0], 255-p[1], 255-p[2], p[3]];
+    });
+}
+
+function colorize(img, color, bias) {
+    /* Returns a colorized image.
+     *  - color: a Color (or array) of RGBA-values to multiply with each image pixel.
+     *  - bias : a Color (or array) of RGBA-values to add to each image pixel.
+     */
+    var m1 = new Color(color || [1,1,1,1]).rgba();
+    var m2 = new Color(bias || [0,0,0,0]).map({base: 255});
+    return filter(img, function(p) {
+        return [
+            p[0] * m1[0] + m2[0],
+            p[1] * m1[1] + m2[1],
+            p[2] * m1[2] + m2[2],
+            p[3] * m1[3] + m2[3]
+        ];
+    });
 }
 
 // function adjust(img, {hue:0, saturation:1.0, brightness:1.0, contrast:1.0})
@@ -2696,7 +2748,7 @@ function adjust(img, options) {
             return [p[0] + m, p[1] + m, p[2] + m, p[3]]; 
         });
     }
-    var kernelt_contrast = function(pixels, m) {
+    var adjust_contrast = function(pixels, m) {
         pixels.map(function(p) {
             return [(p[0]-128)*m + 128, (p[1]-128)*m + 128, (p[2]-128)*m + 128, p[3]]; 
         });
@@ -2717,18 +2769,161 @@ function adjust(img, options) {
 function desaturate(img) {
     /* Returns a grayscale version of the image.
      */
-    return adjust(img, {saturation:0});
+    return adjust(img, {saturation: 0});
 }
 
-function invert(img) {
-    /* Returns an image with inverted colors (e.g. white becomes black).
+function brightpass(img, threshold) {
+    /* Returns a new image where pixels whose luminance fall below the threshold are black.
      */
-    var pixels = new Pixels(img);
-    pixels.map(function(p) {
-        return [255-p[0], 255-p[1], 255-p[2], p[3]];
+    var L = [0.2125 / 255, 0.7154 / 255, 0.072 / 255];
+    return filter(img, function(p) {
+        return (Math.dot(p, L) > ((threshold || threshold == 0)? threshold : 0.5))? p : [0,0,0, p[3]];
+    });    
+}
+
+function blur(img, radius) {
+    /* Applies a stack blur filter to the image and returns the blurred image.
+     * - radius: the radius of the blur effect in pixels (0-175).
+     */
+    radius = (radius === undefined)? 10 : radius;
+    radius = Math.min(radius, 175);
+    var buffer = new OffscreenBuffer(img._img.width, img._img.height);
+    return _stackblur(img, buffer, radius);
+}
+
+/*--- IMAGE FILTERS | ALPHA COMPOSITING ------------------------------------------------------------*/
+
+function composite(img1, img2, dx, dy, operator) {
+    /* Returns a new Image by mixing img1 (the destination) with blend image img2 (the source).
+     * The given operator is a function(pixel1, pixel2) that returns a new pixel (RGBA-array).
+     * This is used to implement alpha compositing and blend modes.
+     * - dx: horizontal offset (in pixels) of the blend layer.
+     * - dy: vertical offset (in pixels) of the blend layer.
+     */
+    //var t = new Date().getTime();
+    dx = dx || 0;
+    dy = dy || 0;
+    var pixels1 = new Pixels(img1);
+    var pixels2 = new Pixels(img2);    
+    for (var j=0; j < pixels1.height; j++) {
+        for (var i=0; i < pixels1.width; i++) {
+            if (0 <= i-dx && i-dx < pixels2.width) {
+                if (0 <= j-dy && j-dy < pixels2.height) {
+                    var p1 = pixels1.get(i + j * pixels1.width);
+                    var p2 = pixels2.get((i-dx) + (j-dy) * pixels2.width);
+                    pixels1.set(i + j * pixels1.width, operator(p1, p2));
+                }
+            }
+        }
+    }
+    pixels1.update();
+    //console.log(new Date().getTime() - t);
+    return pixels1.image();
+}
+
+function transparent(img, alpha) {
+    /* Returns a transparent version of the image.
+     */
+    return render(function(canvas) {
+        image(img, {alpha: alpha});
+    }, img.width, img.height);
+}
+
+function mask(img1, img2, dx, dy, alpha) {
+    /* Applies the second image as an alpha mask to the first image.
+     * The second image must be a grayscale image, where the black areas
+     * make the first image transparent (e.g. punch holes in it).
+     * - dx: horizontal offset (in pixels) of the blend layer.
+     * - dy: vertical offset (in pixels) of the blend layer.
+     */
+    alpha = (alpha || alpha == 0)? alpha : 1;
+    return composite(img1, img2, dx, dy, function(p1, p2) {
+        p1[3] = p1[3] * p2[0]/255 * p2[3]/255 * alpha;
+        return p1;
     });
-    pixels.update();
-    return pixels.image();
+}
+
+var ADD      = "add";      // Pixels are added.
+var SUBTRACT = "subtract"; // Pixels are subtracted.
+var LIGHTEN  = "lighten";  // Lightest value for each pixel.
+var DARKEN   = "darken";   // Darkest value for each pixel.
+var MULTIPLY = "multiply"; // Pixels are multiplied, resulting in a darker image.
+var SCREEN   = "screen";   // Pixels are inverted/multiplied/inverted, resulting in a brighter picture.
+
+function blend(mode, img1, img2, dx, dy, alpha) {
+    /* Applies the second image as a blend layer with the first image.
+     * - dx: horizontal offset (in pixels) of the blend layer.
+     * - dy: vertical offset (in pixels) of the blend layer.
+     */
+    alpha = (alpha || alpha == 0)? alpha : 1;
+    switch(mode) {
+        case ADD      : op = function(x, y) { return x + y;          }; break;
+        case SUBTRACT : op = function(x, y) { return x + y - 255;    }; break;
+        case LIGHTEN  : op = function(x, y) { return Math.max(x, y); }; break;
+        case DARKEN   : op = function(x, y) { return Math.min(x, y); }; break;
+        case MULTIPLY : op = function(x, y) { return x * y / 255;    }; break;
+        case SCREEN   : op = function(x, y) { return 255 - (255-x) * (255-y) / 255; }; break;
+        default       : op = function(x, y) { return 0; };
+    }
+    var swap = (mode==LIGHTEN || mode==DARKEN || mode==MULTIPLY || mode==SCREEN);
+    return composite(img1, img2, dx, dy, function(p1, p2) {
+        // Swap opaque blend (alpha=255) with base to mimic Photoshop.
+        if (swap && p2[3] == 255) {
+            var tmp=p1; p1=p2; p2=tmp;
+        }
+        var p = [0,0,0,0];
+        var a = p2[3] / 255 * alpha;
+        p[0] = geometry.lerp(p1[0], op(p1[0], p2[0]), a);
+        p[1] = geometry.lerp(p1[1], op(p1[1], p2[1]), a);
+        p[2] = geometry.lerp(p1[2], op(p1[2], p2[2]), a);
+        p[3] = geometry.lerp(p1[3], 255, a);
+        return p;
+    });
+}
+
+function add(img1, img2, dx, dy, alpha) {
+    return blend(ADD, img1, img2, dx, dy, alpha);
+}
+function subtract(img1, img2, dx, dy, alpha) {
+    return blend(SUBTRACT, img1, img2, dx, dy, alpha);
+}
+function lighten(img1, img2, dx, dy, alpha) {
+    return blend(LIGHTEN, img1, img2, dx, dy, alpha);
+}
+function darken(img1, img2, dx, dy, alpha) {
+    return blend(DARKEN, img1, img2, dx, dy, alpha);
+}
+function multiply(img1, img2, dx, dy, alpha) {
+    return blend(MULTIPLY, img1, img2, dx, dy, alpha);
+}
+function screen(img1, img2, dx, dy, alpha) {
+    return blend(SCREEN, img1, img2, dx, dy, alpha);
+}
+
+/*--- IMAGE FILTERS | LIGHT ------------------------------------------------------------------------*/
+
+function glow(img, intensity, amount) {
+    /* Returns the image blended with a blurred version, yielding a glowing effect.
+     *  - intensity: the opacity of the blur (0.0-1.0).
+     *  - amount   : the number of times to blur. 
+     */
+    if (amount === undefined) amount = 1;
+    if (intensity === undefined) intensity = 0.5;
+    var b = blur(img, amount);
+    return blend(ADD, img, b, 0, 0, intensity);
+}
+
+function bloom(img, intensity, amount, threshold) {
+    /* Returns the image blended with a blurred brightpass version, yielding a "magic glow" effect.
+     *  - intensity: the opacity of the blur (0.0-1.0).
+     *  - amount   : the number of times to blur.
+     *  - threshold: the luminance threshold of pixels that light up.
+     */
+    if (amount === undefined) amount = 1;
+    if (intensity === undefined) intensity = 0.5;
+    if (threshold === undefined) intensity = 0.3;
+    var b = blur(brightpass(img, threshold), amount);
+    return blend(ADD, img, b, 0, 0, intensity);
 }
 
 /*##################################################################################################*/
@@ -2759,19 +2954,19 @@ function widget(canvas, variable, type, options) {
     var v = variable;
     var o = options || {};
     if (canvas.variables[v] === undefined) {
-        var parent = (o && o.parent)? o.parent : $(canvas.element.id + "_widgets");
+        var parent = (o && o.parent)? o.parent : $(canvas.id + "_widgets");
         if (!parent) {
             // No widget container is given, or exists.
             // Insert a <div id="[canvas.id]_widgets" class="widgets"> after the <canvas> element.
             parent = document.createElement("div");
-            parent.id = (canvas.element.id + "_widgets");
+            parent.id = (canvas.id + "_widgets");
             parent.className = "widgets";
             canvas.element.parentNode.insertBefore(parent, canvas.element.nextSibling);
         }
         // Create <input> element with id [canvas.id]_[variable].
         // Create an onchange() that will set the variable to the value of the widget.
         // For FUNCTION, it is an onclick() that will call options.callback(e).
-        var id = canvas.element.id + "_" + v;
+        var id = canvas.id + "_" + v;
         var cb = o.callback || function(e) {};
         // <input type="text" id="id" value="" />
         if (type == STRING || type == TEXT) {
@@ -2887,6 +3082,36 @@ attachEvent(window, "load", function() {
         }
     }
 });
+
+/*--- REQUIRE --------------------------------------------------------------------------------------*/
+
+function require(src) {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src = src;
+    script.onload = script.onreadystatechange = function() {
+        this.busy = !(this.readyState && 
+                      this.readyState != "complete" && 
+                      this.readyState != "loaded");
+    }
+    document.body.appendChild(script);
+}
+
+/*##################################################################################################*/
+
+/*--- FAST STACK BLUR ------------------------------------------------------------------------------*/
+// Mario Klingemann (2010), http://www.quasimondo.com/StackBlurForCanvas/StackBlur.js
+
+var _stackblur_mul=[512,512,456,512,328,456,335,512,405,328,271,456,388,335,292,512,454,405,364,328,298,271,496,456,420,388,360,335,312,292,273,512,482,454,428,405,383,364,345,328,312,298,284,271,259,496,475,456,437,420,404,388,374,360,347,335,323,312,302,292,282,273,265,512,497,482,468,454,441,428,417,405,394,383,373,364,354,345,337,328,320,312,305,298,291,284,278,271,265,259,507,496,485,475,465,456,446,437,428,420,412,404,396,388,381,374,367,360,354,347,341,335,329,323,318,312,307,302,297,292,287,282,278,273,269,265,261,512,505,497,489,482,475,468,461,454,447,441,435,428,422,417,411,405,399,394,389,383,378,373,368,364,359,354,350,345,341,337,332,328,324,320,316,312,309,305,301,298,294,291,287,284,281,278,274,271,268,265,262,259,257,507,501,496,491,485,480,475,470,465,460,456,451,446,442,437,433,428,424,420,416,412,408,404,400,396,392,388,385,381,377,374,370,367,363,360,357,354,350,347,344,341,338,335,332,329,326,323,320,318,315,312,310,307,304,302,299,297,294,292,289,287,285,282,280,278,275,273,271,269,267,265,263,261,259];
+var _stackblur_shg=[9,11,12,13,13,14,14,15,15,15,15,16,16,16,16,17,17,17,17,17,17,17,18,18,18,18,18,18,18,18,18,19,19,19,19,19,19,19,19,19,19,19,19,19,19,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,23,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24];
+
+function _stackblur(img, buffer, radius) {
+
+function BlurStack(){this.r=0;this.g=0;this.b=0;this.a=0;this.next=null}function stackBlurCanvasRGBA(a,b,c,d,e,f){if(isNaN(f)||f<1)return;f|=0;var g=a.element;var h=g.getContext("2d");var i;i=h.getImageData(b,c,d,e);var k=i.data;var l,m,n,o,p,q,r,s,t,u,v,w,x,y,z,A,B,C,D,E,F,G,H,I;var J=f+f+1;var K=d<<2;var L=d-1;var M=e-1;var N=f+1;var O=N*(N+1)/2;var P=new BlurStack;var Q=P;for(n=1;n<J;n++){Q=Q.next=new BlurStack;if(n==N)var R=Q}Q.next=P;var S=null;var T=null;r=q=0;var U=_stackblur_mul[f];var V=_stackblur_shg[f];for(m=0;m<e;m++){A=B=C=D=s=t=u=v=0;w=N*(E=k[q]);x=N*(F=k[q+1]);y=N*(G=k[q+2]);z=N*(H=k[q+3]);s+=O*E;t+=O*F;u+=O*G;v+=O*H;Q=P;for(n=0;n<N;n++){Q.r=E;Q.g=F;Q.b=G;Q.a=H;Q=Q.next}for(n=1;n<N;n++){o=q+((L<n?L:n)<<2);s+=(Q.r=E=k[o])*(I=N-n);t+=(Q.g=F=k[o+1])*I;u+=(Q.b=G=k[o+2])*I;v+=(Q.a=H=k[o+3])*I;A+=E;B+=F;C+=G;D+=H;Q=Q.next}S=P;T=R;for(l=0;l<d;l++){k[q+3]=H=v*U>>V;if(H!=0){H=255/H;k[q]=(s*U>>V)*H;k[q+1]=(t*U>>V)*H;k[q+2]=(u*U>>V)*H}else{k[q]=k[q+1]=k[q+2]=0}s-=w;t-=x;u-=y;v-=z;w-=S.r;x-=S.g;y-=S.b;z-=S.a;o=r+((o=l+f+1)<L?o:L)<<2;A+=S.r=k[o];B+=S.g=k[o+1];C+=S.b=k[o+2];D+=S.a=k[o+3];s+=A;t+=B;u+=C;v+=D;S=S.next;w+=E=T.r;x+=F=T.g;y+=G=T.b;z+=H=T.a;A-=E;B-=F;C-=G;D-=H;T=T.next;q+=4}r+=d}for(l=0;l<d;l++){B=C=D=A=t=u=v=s=0;q=l<<2;w=N*(E=k[q]);x=N*(F=k[q+1]);y=N*(G=k[q+2]);z=N*(H=k[q+3]);s+=O*E;t+=O*F;u+=O*G;v+=O*H;Q=P;for(n=0;n<N;n++){Q.r=E;Q.g=F;Q.b=G;Q.a=H;Q=Q.next}p=d;for(n=1;n<=f;n++){q=p+l<<2;s+=(Q.r=E=k[q])*(I=N-n);t+=(Q.g=F=k[q+1])*I;u+=(Q.b=G=k[q+2])*I;v+=(Q.a=H=k[q+3])*I;A+=E;B+=F;C+=G;D+=H;Q=Q.next;if(n<M){p+=d}}q=l;S=P;T=R;for(m=0;m<e;m++){o=q<<2;k[o+3]=H=v*U>>V;if(H>0){H=255/H;k[o]=(s*U>>V)*H;k[o+1]=(t*U>>V)*H;k[o+2]=(u*U>>V)*H}else{k[o]=k[o+1]=k[o+2]=0}s-=w;t-=x;u-=y;v-=z;w-=S.r;x-=S.g;y-=S.b;z-=S.a;o=l+((o=m+N)<M?o:M)*d<<2;s+=A+=S.r=k[o];t+=B+=S.g=k[o+1];u+=C+=S.b=k[o+2];v+=D+=S.a=k[o+3];S=S.next;w+=E=T.r;x+=F=T.g;y+=G=T.b;z+=H=T.a;A-=E;B-=F;C-=G;D-=H;T=T.next;q+=d}}h.putImageData(i,b,c)}function stackBlurImage(a,b,c,d){var e=a._img;var f=e.width;var g=e.height;var h=b.element;h.style.width=f+"px";h.style.height=g+"px";h.width=f;h.height=g;var i=h.getContext("2d");i.clearRect(0,0,f,g);i.drawImage(e,0,0);if(isNaN(c)||c<1)return;if(d)stackBlurCanvasRGBA(b,0,0,f,g,c);else stackBlurCanvasRGB(b,0,0,f,g,c)}
+
+stackBlurImage(img, buffer, radius, true);
+return buffer.image();
+};
 
 /*##################################################################################################*/
 
